@@ -110,11 +110,6 @@ Genaker/FreeAdmin/
 2. Verify plugin is loaded: `php bin/magento setup:di:compile`
 3. Clear caches: `php bin/magento cache:flush`
 
-### Still Asking for Credentials
-1. Ensure `Magento_Backend` is set to `0` in `config.php`
-2. Check file permissions on `config.php`
-3. Verify the plugin is properly registered in `di.xml`
-
 ## Customization
 To modify the authentication bypass logic, edit `SimpleLoginPlugin.php` in the `beforeLogin` method.
 
