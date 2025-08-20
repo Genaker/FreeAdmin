@@ -109,6 +109,7 @@ Genaker/FreeAdmin/
 1. Check if module is enabled: `php bin/magento module:status Genaker_FreeAdmin`
 2. Verify plugin is loaded: `php bin/magento setup:di:compile`
 3. Clear caches: `php bin/magento cache:flush`
+4. We need also disable TWO FACTOR Auth modules 
 
 ## Customization
 To modify the authentication bypass logic, edit `SimpleLoginPlugin.php` in the `beforeLogin` method.
