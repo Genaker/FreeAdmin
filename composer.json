@@ -1,6 +1,6 @@
 {
     "name": "genaker/free-admin",
-    "description": "Magento 2 module that allows free admin login when Magento_Backend module is disabled",
+    "description": "Magento 2 module that allows free admin login when env.php backend => auth = false",
     "type": "magento2-module",
     "license": "MIT",
     "authors": [
