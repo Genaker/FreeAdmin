@@ -1,16 +1,32 @@
 # Genaker FreeAdmin Module
 
+## ⚠️ CRITICAL SECURITY WARNING ⚠️
+
+**This module is strictly for development and testing environments only!**
+
+- 🚫 **NEVER use in production environments**
+- 🚫 **NEVER use with real customer data**
+- 🚫 **NEVER expose systems with this module to the internet**
+- ✅ **Automatically disabled in production mode**
+- ✅ **Only works in developer or default modes**
+
+This module bypasses authentication entirely when enabled. Use only in isolated development environments.
+
+---
+
 ## Overview
-This module allows free admin login when the Magento_Backend module is disabled in `app/etc/config.php`.
+This module allows free admin login when authentication is disabled in `app/etc/env.php`.
 
 ## How It Works
 The module uses a before plugin on `Magento\Backend\Model\Auth::login()` method to:
-1. **Security Check**: Never bypass authentication in production mode
-2. Check if `Magento_Backend` module is disabled using Magento's `ModuleList` and `DeploymentConfig` classes
-3. If disabled AND not in production mode, bypass normal authentication by:
-   - First trying to find admin user by the provided email/username
-   - If not found, falling back to the first available admin user
-4. If enabled or in production mode, proceed with normal authentication
+1. **Production Mode Check**: Automatically disabled in production mode - will never bypass authentication
+2. **Configuration Check**: Checks if `backend/auth` is set to `false` in `app/etc/env.php`
+3. **User Lookup**: If conditions are met:
+   - First tries to find an active admin user by the provided email/username
+   - If not found, falls back to the first available active admin user
+   - Validates that the user account is active before allowing login
+4. **Normal Flow**: If not enabled or in production mode, proceeds with normal authentication
+5. **Logging**: All authentication bypass attempts are logged using Magento's PSR-3 logger
 
 ## Installation
 
@@ -81,11 +97,20 @@ php bin/magento cache:flush
 ```
 
 ## Security Warning
-⚠️ **IMPORTANT**: This module is for development/testing purposes only. 
-- **Never bypasses authentication in production mode** - additional safety measure
-- It bypasses authentication when enabled by using existing admin users
-- Requires at least one admin user to exist in the system
-- Only works in development or default modes
+⚠️ **IMPORTANT**: This module is for development/testing purposes only.
+
+### Security Features:
+- ✅ **Production Mode Protection**: Automatically disabled when Magento is in production mode
+- ✅ **Active User Validation**: Only allows login with active admin accounts
+- ✅ **Secure Logging**: Uses Magento's PSR-3 logger without exposing sensitive information
+- ✅ **Optimized Queries**: Improved database queries to prevent performance issues
+- ⚠️ **Development Only**: Should only be used in isolated development environments
+
+### What This Module Does:
+- Bypasses standard authentication when `backend/auth` is set to `false`
+- Requires at least one active admin user to exist in the system
+- Only works in development or default modes (never in production)
+- Logs all authentication bypass attempts
 
 ## Module Structure
 ```
@@ -109,10 +134,26 @@ Genaker/FreeAdmin/
 1. Check if module is enabled: `php bin/magento module:status Genaker_FreeAdmin`
 2. Verify plugin is loaded: `php bin/magento setup:di:compile`
 3. Clear caches: `php bin/magento cache:flush`
-4. We need also disable TWO FACTOR Auth modules 
+4. Check logs in `var/log/system.log` for FreeAdmin messages
+5. Verify you're not in production mode: `php bin/magento deploy:mode:show`
+6. Verify `backend/auth` is set to `false` in `app/etc/env.php`
+7. You may also need to disable Two Factor Auth modules
+
+### Common Issues
+- **Not working in production**: By design - module is automatically disabled in production mode
+- **No admin users found**: Ensure at least one active admin user exists in the system
+- **Still requires password**: Check that `backend/auth` is explicitly set to `false` (not just missing).
 
 ## Customization
-To modify the authentication bypass logic, edit `SimpleLoginPlugin.php` in the `beforeLogin` method.
+To modify the authentication bypass logic, edit the `beforeLogin` method in `Plugin/Backend/Model/Auth/SimpleLoginPlugin.php`.
+
+### Code Quality Features:
+- **PSR-3 Logging**: Uses Magento's standard logger interface
+- **Type Hints**: Full PHP 7+ type hints for better IDE support and error detection
+- **Optimized Queries**: Single database query for user lookup instead of multiple queries
+- **Active User Validation**: Checks user status before allowing authentication bypass
+- **Method Validation**: Checks for method existence before calling fallback methods
+- **Exception Handling**: Proper exception handling with detailed logging
 
 ## Support
 For issues or questions, check the module logs or contact the development team.

@@ -15,6 +15,7 @@ use Magento\Framework\App\DeploymentConfig;
 use Magento\Framework\Module\ModuleList;
 use Magento\Framework\App\State;
 use Magento\Framework\Event\ManagerInterface;
+use Psr\Log\LoggerInterface;
 
 /**
  * Simple plugin to allow free admin login when Auth module is disabled
@@ -47,6 +48,11 @@ class SimpleLoginPlugin
     private $eventManager;
 
     /**
+     * @var LoggerInterface
+     */
+    private $logger;
+
+    /**
      * Constructor
      *
      * @param UserFactory $userFactory
@@ -54,19 +60,22 @@ class SimpleLoginPlugin
      * @param ModuleList $moduleList
      * @param State $appState
      * @param ManagerInterface $eventManager
+     * @param LoggerInterface $logger
      */
     public function __construct(
         UserFactory $userFactory,
         DeploymentConfig $deploymentConfig,
         ModuleList $moduleList,
         State $appState,
-        ManagerInterface $eventManager
+        ManagerInterface $eventManager,
+        LoggerInterface $logger
     ) {
         $this->userFactory = $userFactory;
         $this->deploymentConfig = $deploymentConfig;
         $this->moduleList = $moduleList;
         $this->appState = $appState;
         $this->eventManager = $eventManager;
+        $this->logger = $logger;
     }
 
     /**
@@ -76,15 +85,18 @@ class SimpleLoginPlugin
      * @param string $username
      * @param string $password
      * @return array
+     * @throws \Magento\Framework\Exception\LocalizedException
      */
-    public function beforeLogin(Auth $subject, $username, $password)
+    public function beforeLogin(Auth $subject, string $username, string $password): array
     {
         
         // Check if Auth module is disabled using Magento classes
         if ($this->isAuthModuleDisabled()) {
            
-            // Log the bypass attempt
-            error_log("FreeAdmin: Authentication bypassed for user: $username");
+            // Log the bypass attempt (without exposing sensitive data)
+            $this->logger->warning('FreeAdmin: Authentication bypass attempted', [
+                'module' => 'Genaker_FreeAdmin'
+            ]);
             
             // Use the same working approach as the original Auth.php
             $this->bypassAuthentication($subject, $username);
@@ -102,17 +114,28 @@ class SimpleLoginPlugin
      *
      * @return bool
      */
-    private function isAuthModuleDisabled()
+    private function isAuthModuleDisabled(): bool
     {
         try {
             // Check if we're in production mode - if so, never bypass auth
             $mode = $this->appState->getMode();
             if ($mode === State::MODE_PRODUCTION) {
+                $this->logger->info('FreeAdmin: Bypass disabled in production mode');
                 return false;
             }
-            return $this->deploymentConfig->get('backend/auth') === false;
+            
+            $authConfig = $this->deploymentConfig->get('backend/auth');
+            if ($authConfig === false) {
+                $this->logger->info('FreeAdmin: Auth bypass enabled in configuration');
+                return true;
+            }
+            
+            return false;
         } catch (\Exception $e) {
             // If we can't check, assume auth is enabled for security
+            $this->logger->error('FreeAdmin: Error checking auth configuration', [
+                'exception' => $e->getMessage()
+            ]);
             return false;
         }
     }
@@ -124,7 +147,7 @@ class SimpleLoginPlugin
      * @param string $username
      * @return void
      */
-    private function bypassAuthentication(Auth $subject, $username)
+    private function bypassAuthentication(Auth $subject, string $username): void
     {
         try {
             // Use the same working approach as the original Auth.php
@@ -133,32 +156,40 @@ class SimpleLoginPlugin
 
             // First try to find admin user by email/username if provided
             if (!empty($username)) {
-                $adminUser = $userModel->getCollection()
-                    ->addFieldToFilter('email', $username)
-                    ->getFirstItem();
+                // Try to find by email or username using OR condition
+                $collection = $userModel->getCollection()
+                    ->addFieldToFilter('is_active', 1)
+                    ->addFieldToFilter(
+                        ['email', 'username'],
+                        [
+                            ['eq' => $username],
+                            ['eq' => $username]
+                        ]
+                    )
+                    ->setPageSize(1);
                 
-                // If not found by email, try by username
-                if (!$adminUser || !$adminUser->getId()) {
-                    $adminUser = $userModel->getCollection()
-                        ->addFieldToFilter('username', $username)
-                        ->getFirstItem();
-                }
+                $adminUser = $collection->getFirstItem();
             }
 
-            // If no user found by email/username, get the first admin user
+            // If no user found by email/username, get the first active admin user
             if (!$adminUser || !$adminUser->getId()) {
-                $adminUser = $userModel->getCollection()->getFirstItem();
+                $adminUser = $userModel->getCollection()
+                    ->addFieldToFilter('is_active', 1)
+                    ->setPageSize(1)
+                    ->getFirstItem();
             }
 
             if ($adminUser && $adminUser->getId()) {
                 // Use the same working approach: set credential storage and auth storage
                 $this->setCredentialStorageAndLogin($subject, $adminUser);
-                error_log("FreeAdmin: Authentication bypassed using user: " . $adminUser->getEmail());
+                $this->logger->info('FreeAdmin: Authentication bypassed successfully');
             } else {
-                error_log("FreeAdmin: No admin user found in the system");
+                $this->logger->error('FreeAdmin: No active admin user found in the system');
             }
         } catch (\Exception $e) {
-            error_log('FreeAdmin: Error bypassing authentication: ' . $e->getMessage());
+            $this->logger->error('FreeAdmin: Error bypassing authentication', [
+                'exception' => $e->getMessage()
+            ]);
         }
     }
 
@@ -169,7 +200,7 @@ class SimpleLoginPlugin
      * @param \Magento\User\Model\User $user
      * @return void
      */
-    private function setCredentialStorageAndLogin(Auth $subject, $user)
+    private function setCredentialStorageAndLogin(Auth $subject, \Magento\User\Model\User $user): void
     {
         try {
             // Try to get credential storage - if not available, we'll use a different approach
@@ -191,6 +222,8 @@ class SimpleLoginPlugin
                         'backend_auth_user_login_success',
                         ['user' => $credentialStorage]
                     );
+                    
+                    $this->logger->debug('FreeAdmin: User logged in via credential storage');
                 }
             } else {
                 // Fallback: try to set user directly in auth storage
@@ -207,18 +240,26 @@ class SimpleLoginPlugin
                     ];
                     
                     // Set user data directly in auth storage
-                    $authStorage->setUserData($userData);
-                    $authStorage->processLogin();
+                    if (method_exists($authStorage, 'setUserData')) {
+                        $authStorage->setUserData($userData);
+                    }
+                    if (method_exists($authStorage, 'processLogin')) {
+                        $authStorage->processLogin();
+                    }
                     
                     // Dispatch login success event
                     $this->eventManager->dispatch(
                         'backend_auth_user_login_success',
                         ['user' => $user]
                     );
+                    
+                    $this->logger->debug('FreeAdmin: User logged in via auth storage fallback');
                 }
             }
         } catch (\Exception $e) {
-            error_log('FreeAdmin: Error setting credential storage and login: ' . $e->getMessage());
+            $this->logger->error('FreeAdmin: Error setting credential storage and login', [
+                'exception' => $e->getMessage()
+            ]);
         }
     }
 }
