@@ -142,7 +142,7 @@ Genaker/FreeAdmin/
 ### Common Issues
 - **Not working in production**: By design - module is automatically disabled in production mode
 - **No admin users found**: Ensure at least one active admin user exists in the system
-- **Still requires password**: Check that `backend/auth` is explicitly set to `false` (not just missing) 
+- **Still requires password**: Check that `backend/auth` is explicitly set to `false` (not just missing).
 
 ## Customization
 To modify the authentication bypass logic, edit the `beforeLogin` method in `Plugin/Backend/Model/Auth/SimpleLoginPlugin.php`.
