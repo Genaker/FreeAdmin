@@ -156,8 +156,9 @@ class SimpleLoginPlugin
 
             // First try to find admin user by email/username if provided
             if (!empty($username)) {
-                // Try to find by email first, then by username in one query
+                // Try to find by email or username using OR condition
                 $collection = $userModel->getCollection()
+                    ->addFieldToFilter('is_active', 1)
                     ->addFieldToFilter(
                         ['email', 'username'],
                         [
@@ -165,7 +166,6 @@ class SimpleLoginPlugin
                             ['eq' => $username]
                         ]
                     )
-                    ->addFieldToFilter('is_active', 1)
                     ->setPageSize(1);
                 
                 $adminUser = $collection->getFirstItem();
@@ -180,12 +180,6 @@ class SimpleLoginPlugin
             }
 
             if ($adminUser && $adminUser->getId()) {
-                // Validate user is active
-                if (!$adminUser->getIsActive()) {
-                    $this->logger->warning('FreeAdmin: Attempted login with inactive user');
-                    return;
-                }
-                
                 // Use the same working approach: set credential storage and auth storage
                 $this->setCredentialStorageAndLogin($subject, $adminUser);
                 $this->logger->info('FreeAdmin: Authentication bypassed successfully');
